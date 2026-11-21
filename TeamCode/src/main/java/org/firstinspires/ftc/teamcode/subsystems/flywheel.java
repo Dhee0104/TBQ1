@@ -1,31 +1,26 @@
-package org.firstinspires.ftc.teamcode;
+package org.firstinspires.ftc.teamcode.subsystems;
 
 import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
 import com.arcrobotics.ftclib.controller.PIDFController;
 
+import org.firstinspires.ftc.teamcode.InterpolatingTreeMap;
+
 public class flywheel {
-    private final DcMotorEx motorLeft;
-    private final DcMotorEx motorRight;
+    private final DcMotorEx motor;
 
     private final PIDFController pidfController;
     private final InterpolatingTreeMap distanceToVelocityTable;
 
-    // TODO: Update this constant to match your specific motor's encoder CPR (Counts Per Revolution)
-    // Example: GoBILDA 19.2:1 = 537.6 | REV HD Hex = 537.7 | REV Core Hex = 288.0
-    private static final double TICKS_PER_REV = 537.6;
+    private static final double TICKS_PER_REV = 537.6; // GoBILDA 19.2:1 (Update if using a different motor)
 
     private double targetRPM = 0.0;
     private double currentRPM = 0.0;
     private double powerOutput = 0.0;
 
-    public flywheel(DcMotorEx motorLeft, DcMotorEx motorRight, double kp, double ki, double kd, double kf) {
-        this.motorLeft = motorLeft;
-        this.motorRight = motorRight;
-
-        // Motors are on opposite sides, reverse one so they spin together
-        this.motorLeft.setDirection(DcMotor.Direction.FORWARD);
-        this.motorRight.setDirection(DcMotor.Direction.REVERSE);
+    public flywheel(DcMotorEx motor, double kp, double ki, double kd, double kf) {
+        this.motor = motor;
+        this.motor.setDirection(DcMotor.Direction.FORWARD); // Adjust if your motor spins backward
 
         // Initialize FTCLib PIDF Controller
         this.pidfController = new PIDFController(kp, ki, kd, kf);
@@ -48,11 +43,8 @@ public class flywheel {
      * Call this in the OpMode's init() method.
      */
     public void init() {
-        motorLeft.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
-        motorRight.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
-        motorLeft.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
-        motorRight.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
-
+        motor.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+        motor.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
         pidfController.reset();
     }
 
@@ -65,24 +57,22 @@ public class flywheel {
         // 1. Look up target RPM from our lookup table based on distance
         targetRPM = distanceToVelocityTable.getInterpolated(distance);
 
-        // 2. Read native motor velocity (ticks/sec), average both motors, and convert to RPM
-        double avgTicksPerSec = (motorLeft.getVelocity() + motorRight.getVelocity()) / 2.0;
-        currentRPM = (avgTicksPerSec * 60.0) / TICKS_PER_REV;
+        // 2. Read native motor velocity (ticks/sec) and convert to RPM
+        double ticksPerSec = motor.getVelocity();
+        currentRPM = (ticksPerSec * 60.0) / TICKS_PER_REV;
 
-        // 3. Calculate PIDF output (FTCLib calculate takes (measured, target))
+        // 3. Calculate PIDF output
         powerOutput = pidfController.calculate(currentRPM, targetRPM);
 
-        // 4. Apply power to motors
-        motorLeft.setPower(powerOutput);
-        motorRight.setPower(powerOutput);
+        // 4. Apply power to the motor
+        motor.setPower(powerOutput);
     }
 
     /**
      * Call this in the OpMode's stop() or end() method.
      */
     public void end() {
-        motorLeft.setPower(0);
-        motorRight.setPower(0);
+        motor.setPower(0);
     }
 
     // Getters for telemetry debugging

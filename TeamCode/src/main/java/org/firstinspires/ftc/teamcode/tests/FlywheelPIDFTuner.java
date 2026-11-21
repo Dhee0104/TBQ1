@@ -8,7 +8,7 @@ import com.arcrobotics.ftclib.controller.PIDFController;
 
 /**
  * =====================================================================
- * SIMPLIFIED ITERATIVE FLYWHEEL RPM PIDF TUNER (SDK 10.3+)
+ * SINGLE-MOTOR FLYWHEEL RPM PIDF TUNER (SDK 10.3+)
  * =====================================================================
  * CONTROLS EXPLANATION:
  *  - Triggers (L / R)   : Make flywheel move slower / faster (adjusts Target RPM)
@@ -16,13 +16,13 @@ import com.arcrobotics.ftclib.controller.PIDFController;
  *  - D-Pad Up / Down    : Increase or decrease the active magnitude step-size
  *  - Bumpers (L / R)    : Subtract (-) or Add (+) selected magnitude to active gain
  *  - Button A           : Starts up / enables the PIDF flywheel control loop
- *  - Button B           : Turns off the motors
+ *  - Button B           : Turns off the motor
  * =====================================================================
  */
-@TeleOp(name = "Simple Flywheel RPM Tuner", group = "Tuning")
+@TeleOp(name = "Single Motor Flywheel Tuner", group = "Tuning")
 public class FlywheelPIDFTuner extends OpMode {
 
-    private DcMotorEx motorLeft, motorRight;
+    private DcMotorEx motor;
     private PIDFController pidfController;
 
     private static final double TICKS_PER_REV = 537.6; // GoBILDA 19.2:1
@@ -47,16 +47,11 @@ public class FlywheelPIDFTuner extends OpMode {
 
     @Override
     public void init() {
-        motorLeft = hardwareMap.get(DcMotorEx.class, "leftFlywheel");
-        motorRight = hardwareMap.get(DcMotorEx.class, "rightFlywheel");
+        motor = hardwareMap.get(DcMotorEx.class, "flywheelMotor");
+        motor.setDirection(DcMotor.Direction.FORWARD);
 
-        motorLeft.setDirection(DcMotor.Direction.FORWARD);
-        motorRight.setDirection(DcMotor.Direction.REVERSE);
-
-        motorLeft.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
-        motorRight.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
-        motorLeft.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
-        motorRight.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+        motor.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+        motor.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
 
         pidfController = new PIDFController(kp, ki, kd, kf);
 
@@ -78,23 +73,21 @@ public class FlywheelPIDFTuner extends OpMode {
         pidfController.setPIDF(kp, ki, kd, kf);
 
         // 3. Compute current RPM
-        double avgTicksPerSec = (motorLeft.getVelocity() + motorRight.getVelocity()) / 2.0;
-        double currentRPM = (avgTicksPerSec * 60.0) / TICKS_PER_REV;
+        double ticksPerSec = motor.getVelocity();
+        double currentRPM = (ticksPerSec * 60.0) / TICKS_PER_REV;
 
-        // 4. Drive motors if enabled, otherwise cut power
+        // 4. Drive motor if enabled, otherwise cut power
         double power = 0.0;
         if (motorEnabled) {
             power = pidfController.calculate(currentRPM, targetRPM);
-            motorLeft.setPower(power);
-            motorRight.setPower(power);
+            motor.setPower(power);
         } else {
-            motorLeft.setPower(0);
-            motorRight.setPower(0);
+            motor.setPower(0);
             pidfController.reset();
         }
 
         // 5. Telemetry Dashboard
-        telemetry.addLine("=== SIMPLE FLYWHEEL RPM TUNER ===");
+        telemetry.addLine("=== SINGLE MOTOR FLYWHEEL TUNER ===");
         telemetry.addData("Motor Status", motorEnabled ? "RUNNING" : "STOPPED (Press A)");
         telemetry.addData("Target RPM", targetRPM);
         telemetry.addData("Current RPM", currentRPM);
@@ -116,28 +109,23 @@ public class FlywheelPIDFTuner extends OpMode {
 
     @Override
     public void stop() {
-        motorLeft.setPower(0);
-        motorRight.setPower(0);
+        motor.setPower(0);
     }
 
     private void handleInputs() {
-        // A button starts motors
         if (gamepad1.aWasPressed()) {
             motorEnabled = true;
         }
-        // B button stops motors
         if (gamepad1.bWasPressed()) {
             motorEnabled = false;
         }
 
-        // Triggers make flywheel move faster or slower
         double triggerDelta = (gamepad1.right_trigger - gamepad1.left_trigger);
         if (Math.abs(triggerDelta) > 0.05) {
-            targetRPM += triggerDelta * 25.0; // scales smoothly with trigger pull
+            targetRPM += triggerDelta * 25.0;
             targetRPM = Math.max(0, targetRPM);
         }
 
-        // D-Pad Left / Right cycles through parameters (Kp, Ki, Kd, Kf)
         if (gamepad1.dpadLeftWasPressed()) {
             selectedParamIndex--;
             if (selectedParamIndex < 0) selectedParamIndex = paramNames.length - 1;
@@ -147,7 +135,6 @@ public class FlywheelPIDFTuner extends OpMode {
             if (selectedParamIndex >= paramNames.length) selectedParamIndex = 0;
         }
 
-        // D-Pad Up / Down increases or decreases magnitude step-size
         if (gamepad1.dpadUpWasPressed()) {
             magnitudeIndex = Math.min(magnitudes.length - 1, magnitudeIndex + 1);
         }
@@ -155,7 +142,6 @@ public class FlywheelPIDFTuner extends OpMode {
             magnitudeIndex = Math.max(0, magnitudeIndex - 1);
         }
 
-        // Bumpers add or subtract the selected magnitude from the active gain
         double currentMag = magnitudes[magnitudeIndex];
         if (gamepad1.rightBumperWasPressed()) {
             adjustActiveGain(currentMag);
