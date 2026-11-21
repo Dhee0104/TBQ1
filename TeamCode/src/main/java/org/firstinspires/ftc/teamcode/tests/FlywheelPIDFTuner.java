@@ -8,47 +8,48 @@ import com.arcrobotics.ftclib.controller.PIDFController;
 
 /**
  * =====================================================================
- * ITERATIVE FLYWHEEL RPM PIDF TUNER (Using FTC SDK 10.3+ Native Edge Detection)
+ * SIMPLIFIED ITERATIVE FLYWHEEL RPM PIDF TUNER (SDK 10.3+)
  * =====================================================================
  * CONTROLS EXPLANATION:
- *  - D-Pad Left / Right : Cycle through parameters to edit
- *                         (Target RPM -> Kp -> Ki -> Kd -> Kf)
- *  - D-Pad Up / Down    : Add (+) or Subtract (-) active magnitude
- *  - Right Bumper       : Increase magnitude step-size (multiply by 10)
- *  - Left Bumper        : Decrease magnitude step-size (divide by 10)
+ *  - Triggers (L / R)   : Make flywheel move slower / faster (adjusts Target RPM)
+ *  - D-Pad Left / Right : Cycle through parameters to edit (Kp -> Ki -> Kd -> Kf)
+ *  - D-Pad Up / Down    : Increase or decrease the active magnitude step-size
+ *  - Bumpers (L / R)    : Subtract (-) or Add (+) selected magnitude to active gain
+ *  - Button A           : Starts up / enables the PIDF flywheel control loop
+ *  - Button B           : Turns off the motors
  * =====================================================================
  */
-@TeleOp(name = "Iterative Flywheel RPM PIDF Tuner", group = "Tuning")
+@TeleOp(name = "Simple Flywheel RPM Tuner", group = "Tuning")
 public class FlywheelPIDFTuner extends OpMode {
 
     private DcMotorEx motorLeft, motorRight;
     private PIDFController pidfController;
 
-    // Motor Encoder Constant (Update to match your specific motor's CPR)
-    // GoBILDA 5202 series (19.2:1) = 537.6 | REV HD Hex = 537.7
-    private static final double TICKS_PER_REV = 537.6;
+    private static final double TICKS_PER_REV = 537.6; // GoBILDA 19.2:1
 
-    // Tuning Parameters (RPM Mode)
+    // Tuning Parameters
     private double targetRPM = 2500.0;
     private double kp = 0.001;
     private double ki = 0.0;
     private double kd = 0.0;
     private double kf = 0.0002;
 
-    // Selection & Magnitude management
-    private int selectedParamIndex = 0;
-    private final String[] paramNames = {"Target RPM", "Kp", "Ki", "Kd", "Kf"};
+    // Motor state toggle
+    private boolean motorEnabled = false;
 
-    // Step sizes spanning powers of 10
-    private final double[] magnitudes = {0.00001, 0.0001, 0.001, 0.01, 0.1, 1.0, 10.0, 100.0, 1000.0};
-    private int magnitudeIndex = 3; // Starts at 0.01
+    // Parameter selection (Kp, Ki, Kd, Kf)
+    private int selectedParamIndex = 0;
+    private final String[] paramNames = {"Kp", "Ki", "Kd", "Kf"};
+
+    // Magnitude step sizes
+    private final double[] magnitudes = {0.00001, 0.0001, 0.001, 0.01, 0.1, 1.0};
+    private int magnitudeIndex = 2; // Starts at 0.001
 
     @Override
     public void init() {
         motorLeft = hardwareMap.get(DcMotorEx.class, "leftFlywheel");
         motorRight = hardwareMap.get(DcMotorEx.class, "rightFlywheel");
 
-        // Set opposing directions so both wheels spin in the same direction
         motorLeft.setDirection(DcMotor.Direction.FORWARD);
         motorRight.setDirection(DcMotor.Direction.REVERSE);
 
@@ -59,7 +60,7 @@ public class FlywheelPIDFTuner extends OpMode {
 
         pidfController = new PIDFController(kp, ki, kd, kf);
 
-        telemetry.addData("Status", "Initialized (SDK 10.3+ Native Edge Detection). Press Play.");
+        telemetry.addData("Status", "Initialized. Press A to Start, B to Stop.");
         telemetry.update();
     }
 
@@ -70,39 +71,47 @@ public class FlywheelPIDFTuner extends OpMode {
 
     @Override
     public void loop() {
-        // 1. Process inputs using built-in FTC SDK 10.3+ edge-detection methods directly
+        // 1. Handle Gamepad Inputs using SDK 10.3+ native methods
         handleInputs();
 
-        // 2. Feed updated tuning gains into the PIDF controller live
+        // 2. Update controller gains live
         pidfController.setPIDF(kp, ki, kd, kf);
 
-        // 3. Compute real-time feedback loop in RPM
+        // 3. Compute current RPM
         double avgTicksPerSec = (motorLeft.getVelocity() + motorRight.getVelocity()) / 2.0;
         double currentRPM = (avgTicksPerSec * 60.0) / TICKS_PER_REV;
-        double power = pidfController.calculate(currentRPM, targetRPM);
 
-        motorLeft.setPower(power);
-        motorRight.setPower(power);
+        // 4. Drive motors if enabled, otherwise cut power
+        double power = 0.0;
+        if (motorEnabled) {
+            power = pidfController.calculate(currentRPM, targetRPM);
+            motorLeft.setPower(power);
+            motorRight.setPower(power);
+        } else {
+            motorLeft.setPower(0);
+            motorRight.setPower(0);
+            pidfController.reset();
+        }
 
-        // 4. Update live Telemetry Dashboard
-        telemetry.addLine("=== ITERATIVE FLYWHEEL RPM TUNER ===");
-        telemetry.addData("Active Magnitude", magnitudes[magnitudeIndex]);
+        // 5. Telemetry Dashboard
+        telemetry.addLine("=== SIMPLE FLYWHEEL RPM TUNER ===");
+        telemetry.addData("Motor Status", motorEnabled ? "RUNNING" : "STOPPED (Press A)");
+        telemetry.addData("Target RPM", targetRPM);
+        telemetry.addData("Current RPM", currentRPM);
+        telemetry.addData("RPM Error", targetRPM - currentRPM);
+        telemetry.addData("Power Output", power);
         telemetry.addLine("----------------------------------------");
+        telemetry.addData("Active Step Magnitude", magnitudes[magnitudeIndex]);
 
         for (int i = 0; i < paramNames.length; i++) {
             String prefix = (i == selectedParamIndex) ? " --> [ACTIVE] " : "      ";
-            telemetry.addData(prefix + paramNames[i], getParamValue(i));
+            telemetry.addData(prefix + paramNames[i], getGainValue(i));
         }
 
         telemetry.addLine("----------------------------------------");
-        telemetry.addData("Current RPM", currentRPM);
-        telemetry.addData("Target RPM", targetRPM);
-        telemetry.addData("RPM Error", targetRPM - currentRPM);
-        telemetry.addData("Motor Power Output", power);
-
-        telemetry.addLine("----------------------------------------");
-        telemetry.addLine("CONTROLS: DPad L/R = Change Param | DPad U/D = Adjust Value");
-        telemetry.addLine("          Bumpers (L/R) = Change Step Magnitude");
+        telemetry.addLine("CONTROLS: Triggers = Adjust RPM | A = Start | B = Stop");
+        telemetry.addLine("          DPad L/R = Select Gain | DPad U/D = Change Magnitude");
+        telemetry.addLine("          Bumpers = Subtract (-) / Add (+) Magnitude");
     }
 
     @Override
@@ -111,19 +120,24 @@ public class FlywheelPIDFTuner extends OpMode {
         motorRight.setPower(0);
     }
 
-    /**
-     * Handles inputs leveraging the native SDK 10.3+ edge detection methods
-     * directly on gamepad1.
-     */
     private void handleInputs() {
-        double currentMag = magnitudes[magnitudeIndex];
+        // A button starts motors
+        if (gamepad1.aWasPressed()) {
+            motorEnabled = true;
+        }
+        // B button stops motors
+        if (gamepad1.bWasPressed()) {
+            motorEnabled = false;
+        }
 
-        if (gamepad1.dpadUpWasPressed()) {
-            adjustSelectedParam(currentMag);
+        // Triggers make flywheel move faster or slower
+        double triggerDelta = (gamepad1.right_trigger - gamepad1.left_trigger);
+        if (Math.abs(triggerDelta) > 0.05) {
+            targetRPM += triggerDelta * 25.0; // scales smoothly with trigger pull
+            targetRPM = Math.max(0, targetRPM);
         }
-        if (gamepad1.dpadDownWasPressed()) {
-            adjustSelectedParam(-currentMag);
-        }
+
+        // D-Pad Left / Right cycles through parameters (Kp, Ki, Kd, Kf)
         if (gamepad1.dpadLeftWasPressed()) {
             selectedParamIndex--;
             if (selectedParamIndex < 0) selectedParamIndex = paramNames.length - 1;
@@ -132,35 +146,40 @@ public class FlywheelPIDFTuner extends OpMode {
             selectedParamIndex++;
             if (selectedParamIndex >= paramNames.length) selectedParamIndex = 0;
         }
-        if (gamepad1.leftBumperWasPressed()) {
-            magnitudeIndex = Math.max(0, magnitudeIndex - 1);
-        }
-        if (gamepad1.rightBumperWasPressed()) {
+
+        // D-Pad Up / Down increases or decreases magnitude step-size
+        if (gamepad1.dpadUpWasPressed()) {
             magnitudeIndex = Math.min(magnitudes.length - 1, magnitudeIndex + 1);
         }
-    }
+        if (gamepad1.dpadDownWasPressed()) {
+            magnitudeIndex = Math.max(0, magnitudeIndex - 1);
+        }
 
-    private void adjustSelectedParam(double delta) {
-        if (selectedParamIndex == 0) {
-            targetRPM += delta * 1000.0;
-            targetRPM = Math.max(0, targetRPM);
-        } else {
-            switch (selectedParamIndex) {
-                case 1: kp = Math.max(0, kp + delta); break;
-                case 2: ki = Math.max(0, ki + delta); break;
-                case 3: kd = Math.max(0, kd + delta); break;
-                case 4: kf = Math.max(0, kf + delta); break;
-            }
+        // Bumpers add or subtract the selected magnitude from the active gain
+        double currentMag = magnitudes[magnitudeIndex];
+        if (gamepad1.rightBumperWasPressed()) {
+            adjustActiveGain(currentMag);
+        }
+        if (gamepad1.leftBumperWasPressed()) {
+            adjustActiveGain(-currentMag);
         }
     }
 
-    private double getParamValue(int index) {
+    private void adjustActiveGain(double delta) {
+        switch (selectedParamIndex) {
+            case 0: kp = Math.max(0, kp + delta); break;
+            case 1: ki = Math.max(0, ki + delta); break;
+            case 2: kd = Math.max(0, kd + delta); break;
+            case 3: kf = Math.max(0, kf + delta); break;
+        }
+    }
+
+    private double getGainValue(int index) {
         switch (index) {
-            case 0: return targetRPM;
-            case 1: return kp;
-            case 2: return ki;
-            case 3: return kd;
-            case 4: return kf;
+            case 0: return kp;
+            case 1: return ki;
+            case 2: return kd;
+            case 3: return kf;
             default: return 0.0;
         }
     }
