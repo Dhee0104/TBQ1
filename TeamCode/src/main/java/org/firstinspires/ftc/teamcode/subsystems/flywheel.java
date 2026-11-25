@@ -12,12 +12,12 @@ public class flywheel {
     private final PIDFController pidfController;
     private final InterpolatingTreeMap distanceToVelocityTable;
 
-    private static final double TICKS_PER_REV = 537.6; // GoBILDA 19.2:1 (Update if using a different motor)
+    private static final double TICKS_PER_REV = 28; // GoBILDA 1:1 (Update if using a different motor)
 
     private double targetRPM = 0.0;
     private double currentRPM = 0.0;
     private double powerOutput = 0.0;
-
+// default kp .0005 kd .00003 kf .00018
     public flywheel(DcMotorEx motor, double kp, double ki, double kd, double kf) {
         this.motor = motor;
         this.motor.setDirection(DcMotor.Direction.FORWARD); // Adjust if your motor spins backward

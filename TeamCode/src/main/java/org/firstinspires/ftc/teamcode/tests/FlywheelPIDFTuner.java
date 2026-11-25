@@ -7,17 +7,17 @@ import com.qualcomm.robotcore.hardware.DcMotorEx;
 import com.arcrobotics.ftclib.controller.PIDFController;
 
 /**
- * =====================================================================
- * SINGLE-MOTOR FLYWHEEL RPM PIDF TUNER (SDK 10.3+)
- * =====================================================================
- * CONTROLS EXPLANATION:
- *  - Triggers (L / R)   : Make flywheel move slower / faster (adjusts Target RPM)
- *  - D-Pad Left / Right : Cycle through parameters to edit (Kp -> Ki -> Kd -> Kf)
- *  - D-Pad Up / Down    : Increase or decrease the active magnitude step-size
- *  - Bumpers (L / R)    : Subtract (-) or Add (+) selected magnitude to active gain
- *  - Button A           : Starts up / enables the PIDF flywheel control loop
- *  - Button B           : Turns off the motor
- * =====================================================================
+ - =====================================================================
+ - SINGLE-MOTOR FLYWHEEL RPM PIDF TUNER (SDK 10.3+)
+ - =====================================================================
+ - CONTROLS EXPLANATION:
+ -  - Triggers (L / R)   : Make flywheel move slower / faster (adjusts Target RPM)
+ -  - D-Pad Left / Right : Cycle through parameters to edit (Kp -> Ki -> Kd -> Kf)
+ -  - D-Pad Up / Down    : Increase or decrease the active magnitude step-size
+ -  - Bumpers (L / R)    : Subtract (-) or Add (+) selected magnitude to active gain
+ -  - Button A           : Starts up / enables the PIDF flywheel control loop
+ -  - Button B           : Turns off the motor
+ - =====================================================================
  */
 @TeleOp(name = "Single Motor Flywheel Tuner", group = "Tuning")
 public class FlywheelPIDFTuner extends OpMode {
@@ -25,11 +25,11 @@ public class FlywheelPIDFTuner extends OpMode {
     private DcMotorEx motor;
     private PIDFController pidfController;
 
-    private static final double TICKS_PER_REV = 537.6; // GoBILDA 19.2:1
+    private static final double TICKS_PER_REV = 28; // GoBILDA 1:1
 
     // Tuning Parameters
     private double targetRPM = 2500.0;
-    private double kp = 0.001;
+    private double kp = 0.000;
     private double ki = 0.0;
     private double kd = 0.0;
     private double kf = 0.0002;
@@ -51,7 +51,7 @@ public class FlywheelPIDFTuner extends OpMode {
         motor.setDirection(DcMotor.Direction.FORWARD);
 
         motor.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
-        motor.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
+        motor.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
 
         pidfController = new PIDFController(kp, ki, kd, kf);
 
@@ -86,19 +86,19 @@ public class FlywheelPIDFTuner extends OpMode {
             pidfController.reset();
         }
 
-        // 5. Telemetry Dashboard
+        // 5. Telemetry Dashboard with High Precision Formatting
         telemetry.addLine("=== SINGLE MOTOR FLYWHEEL TUNER ===");
         telemetry.addData("Motor Status", motorEnabled ? "RUNNING" : "STOPPED (Press A)");
-        telemetry.addData("Target RPM", targetRPM);
-        telemetry.addData("Current RPM", currentRPM);
-        telemetry.addData("RPM Error", targetRPM - currentRPM);
-        telemetry.addData("Power Output", power);
+        telemetry.addData("Target RPM", "%.1f", targetRPM);
+        telemetry.addData("Current RPM", "%.1f", currentRPM);
+        telemetry.addData("RPM Error", "%.1f", targetRPM - currentRPM);
+        telemetry.addData("Power Output", "%.4f", power);
         telemetry.addLine("----------------------------------------");
-        telemetry.addData("Active Step Magnitude", magnitudes[magnitudeIndex]);
+        telemetry.addData("Active Step Magnitude", "%.6f", magnitudes[magnitudeIndex]);
 
         for (int i = 0; i < paramNames.length; i++) {
             String prefix = (i == selectedParamIndex) ? " --> [ACTIVE] " : "      ";
-            telemetry.addData(prefix + paramNames[i], getGainValue(i));
+            telemetry.addData(prefix + paramNames[i], String.format("%.6f", getGainValue(i)));
         }
 
         telemetry.addLine("----------------------------------------");
@@ -120,10 +120,11 @@ public class FlywheelPIDFTuner extends OpMode {
             motorEnabled = false;
         }
 
-        double triggerDelta = (gamepad1.right_trigger - gamepad1.left_trigger);
-        if (Math.abs(triggerDelta) > 0.05) {
-            targetRPM += triggerDelta * 25.0;
-            targetRPM = Math.max(0, targetRPM);
+        if (gamepad1.rightTriggerWasPressed()) {
+            targetRPM += 50;
+        }
+        if (gamepad1.leftTriggerWasPressed()) {
+            targetRPM -= 50;
         }
 
         if (gamepad1.dpadLeftWasPressed()) {
